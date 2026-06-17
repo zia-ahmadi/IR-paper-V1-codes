@@ -1,0 +1,56 @@
+import re
+from collections import Counter
+from vector_space_model_with_cosine_similarity import VectorSpaceModel
+
+class PseudoRelevanceFeedback:
+    def __init__(self, vsm_model):
+        self.vsm = vsm_model
+        self.expansion_terms = []
+    
+    def get_top_documents(self, query, top_k=3):
+        """Get top-k relevant documents for a query."""
+        return self.vsm.search(query)[:top_k]
+    
+    def extract_expansion_terms(self, query, top_docs, num_terms=5):
+        """Extract important terms from top documents for expansion."""
+        query_tokens = set(re.findall(r'\b[a-z0-9]+\b', query.lower()))
+        
+        # Score each term in the top documents
+        term_scores = {}
+        for doc_id, _ in top_docs:
+            doc_text = self.vsm.documents[doc_id]
+            doc_tokens = re.findall(r'\b[a-z0-9]+\b', doc_text.lower())
+            doc_term_freq = Counter(doc_tokens)
+            
+            for term, freq in doc_term_freq.items():
+                if term not in query_tokens:
+                    # Weight by frequency and document relevance
+                    term_scores[term] = term_scores.get(term, 0) + freq
+        
+        # Return top terms sorted by score
+        return sorted(term_scores.items(), key=lambda x: x[1], reverse=True)[:num_terms]
+    
+    def expand_query(self, query, expansion_terms):
+        """Expand query with additional terms."""
+        terms = [term for term, _ in expansion_terms]
+        return f"{query} {' '.join(terms)}"
+
+# Example usage
+vsm = VectorSpaceModel()
+vsm.add_document(1, "The quick brown fox jumps over the lazy dog")
+vsm.add_document(2, "A quick brown fox runs fast and agile")
+vsm.add_document(3, "The lazy dog sleeps all day")
+vsm.add_document(4, "Foxes are agile animals with quick reflexes")
+vsm.add_document(5, "Dogs are loyal companions to humans")
+vsm.build_vectors()
+
+prf = PseudoRelevanceFeedback(vsm)
+query = "fox"
+top_docs = prf.get_top_documents(query, top_k=3)
+exp_terms = prf.extract_expansion_terms(query, top_docs, num_terms=3)
+expanded_query = prf.expand_query(query, exp_terms)
+
+print(f"Original query: {query}")
+print(f"Top documents: {top_docs}")
+print(f"Expansion terms: {exp_terms}")
+print(f"Expanded query: {expanded_query}")
